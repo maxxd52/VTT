@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+apps/desktop/src-tauri/target/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+.firebase/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
