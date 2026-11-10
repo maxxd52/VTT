@@ -18,7 +18,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 - [x] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: done | Commit: `d39206b` (vitest: 11/11 passed, svelte-check: 0 errors, vite build: 358.25 kB JS, Playwright E2E verified live canvas + tokens + ruler)
 - [x] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: done | Commit: `da8189f` (vitest: 20/20 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [x] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: done | Commit: `58d292f` (vitest: 25/25 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
-- [ ] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: pending
+- [x] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: done | Commit: pending (vitest: 29/29 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [ ] **T6** (S6) — Route: `inline` — Implement Tauri local storage commands and RTDB `database.rules.json` session expiration. | Status: pending
 
 ## Log
@@ -54,3 +54,8 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
   - Board Engine: Integrated `fogLayer` and `fogPreviewLayer` in `BoardEngine` with interactive rectangle drag for GM (`activeTool === 'fog'`), semi-transparent shroud for GM (alpha 0.55) and opaque for players (alpha 0.98), dispatching `onFogPatch` (`FogPatch`).
   - UI: Updated `BoardCanvas.svelte` to bind `isHost`, emit fog patches, and react to remote `fog:patched` events; updated `SideDrawer.svelte` with custom formula input bar and dice history log; wired `VttShell.svelte` to `parseAndRollDice`.
   - Verification: `vitest` passes 8/8 suites (25/25 tests); `svelte-check` reports 0 errors/warnings; `vite build` succeeds; Playwright verified live `4d6kh3` roll ($6+3+3=12$) and GM Fog rectangle creation. Risk: none.
+- **L9 (Slice 5 Verification — T5):**
+  - Core: Implemented `packages/core/src/sheet.ts` providing `evaluateFormula` (Shunting-yard RPN math evaluator without `eval()`), `evaluateSheet` (multi-pass dependency resolution for computed fields), and `resolveActionRoll` (replaces attribute keys and normalizes arithmetic signs); added 4 deterministic unit tests in `packages/core/tests/sheet.test.ts`.
+  - Dice: Enhanced `packages/core/src/dice.ts` to support chained multiple modifiers (e.g. `1d20+3+2`).
+  - UI: Built `packages/ui/src/CustomSheet.svelte` (Apple-style vitals HP/AC/INIT, attribute steppers, and interactive action buttons); mounted inside `SideDrawer.svelte` under the `Sheet` tab.
+  - Verification: `vitest` passes 9/9 suites (29/29 tests); `svelte-check` reports 0 errors/warnings; `vite build` succeeds; Playwright verified live character sheet rendering, interactive action click ("Longsword Strike" $\rightarrow$ `1d20+3+2`), and roll resolution in the live feed. Risk: none.

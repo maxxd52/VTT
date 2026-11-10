@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Dices, FileText, PanelRightClose, PanelRightOpen } from '@lucide/svelte';
+  import CustomSheet from './CustomSheet.svelte';
 
   export interface RollEntry {
     id: string;
@@ -133,15 +134,7 @@
           </div>
         </div>
       {:else}
-        <div class="flex flex-1 flex-col items-center justify-center p-6 text-center">
-          <div class="rounded-2xl border border-white/10 bg-white/5 p-3">
-            <FileText class="h-6 w-6 text-zinc-400" strokeWidth={1.5} />
-          </div>
-          <p class="mt-3 text-xs font-medium text-zinc-200">Declarative Custom Sheet</p>
-          <p class="mt-1 text-[11px] leading-relaxed text-zinc-400">
-            System-agnostic JSON sheet engine ready for Slice 5.
-          </p>
-        </div>
+        <CustomSheet onRollAction={(roll) => onCustomRoll?.(roll)} />
       {/if}
     </aside>
   {/if}

@@ -32,6 +32,13 @@ describe('Safe Tabletop Dice Parser & Roller', () => {
     expect(minusRes.rolls).toEqual([4, 4]);
     expect(minusRes.modifier).toBe(-3);
     expect(minusRes.total).toBe(5);
+
+    // Multiple chained modifiers: 1d20+3+2 -> modifier = 5
+    const multiRng = createMockRng([0.5]); // 11
+    const multiRes = parseAndRollDice('1d20+3+2', multiRng);
+    expect(multiRes.rolls).toEqual([11]);
+    expect(multiRes.modifier).toBe(5);
+    expect(multiRes.total).toBe(16);
   });
 
   it('supports keep highest (advantage / stat roll) like 2d20kh1 and 4d6kh3', () => {

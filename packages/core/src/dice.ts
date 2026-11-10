@@ -2,7 +2,7 @@ import type { DiceRollResult } from './contracts';
 
 export type RandomNumberGenerator = () => number;
 
-const DICE_REGEX = /^(\d+)?d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$/i;
+const DICE_REGEX = /^(\d+)?d(\d+)(?:(kh|kl)(\d+))?((?:[+-]\d+)*)$/i;
 
 /**
  * Parses and evaluates a tabletop dice notation string safely without eval().
@@ -35,7 +35,14 @@ export function parseAndRollDice(
 
   const count = countStr ? parseInt(countStr, 10) : 1;
   const sides = parseInt(sidesStr, 10);
-  const modifier = modStr ? parseInt(modStr, 10) : 0;
+
+  let modifier = 0;
+  if (modStr) {
+    const modMatches = modStr.matchAll(/([+-]\d+)/g);
+    for (const m of modMatches) {
+      modifier += parseInt(m[1], 10);
+    }
+  }
 
   // Safety guardrails against runaway execution or resource exhaustion
   if (count <= 0 || count > 100) {
