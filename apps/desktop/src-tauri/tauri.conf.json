@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VTT",
+  "version": "0.1.0",
+  "identifier": "com.vtt.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev:web --workspace=../../",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:web --workspace=../../",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "VTT",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}
