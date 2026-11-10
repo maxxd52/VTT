@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "active_sessions": {
+      "$roomId": {
+        ".read": "auth != null",
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && (!data.exists() || data.child('hostUid').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['hostUid', 'expiresAt']) && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= (now + 10800000)"
+        },
+        "presence": {
+          "$uid": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['displayName', 'joinedAt'])"
+          }
+        },
+        "tokens": {
+          ".read": "auth != null",
+          "$tokenId": {
+            ".write": "auth != null && root.child('active_sessions/' + $roomId + '/meta/expiresAt').val() > now",
+            ".validate": "newData.hasChildren(['x', 'y']) && newData.child('x').isNumber() && newData.child('y').isNumber() && (!newData.hasChild('img') || !newData.child('img').val().beginsWith('data:image'))"
+          }
+        },
+        "fog": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('active_sessions/' + $roomId + '/meta/hostUid').val() === auth.uid && root.child('active_sessions/' + $roomId + '/meta/expiresAt').val() > now"
+        },
+        "rolls": {
+          ".read": "auth != null",
+          "$rollId": {
+            ".write": "auth != null && !data.exists() && root.child('active_sessions/' + $roomId + '/meta/expiresAt').val() > now",
+            ".validate": "newData.hasChildren(['actor', 'expression', 'total', 'timestamp'])"
+          }
+        }
+      }
+    }
+  }
+}

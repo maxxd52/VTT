@@ -19,7 +19,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 - [x] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: done | Commit: `da8189f` (vitest: 20/20 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [x] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: done | Commit: `58d292f` (vitest: 25/25 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [x] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: done | Commit: `deeed04` (vitest: 29/29 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
-- [ ] **T6** (S6) — Route: `inline` — Implement Tauri local storage commands and RTDB `database.rules.json` session expiration. | Status: pending
+- [x] **T6** (S6) — Route: `inline` — Implement Tauri local storage commands and RTDB `database.rules.json` session expiration. | Status: done | Commit: pending (vitest: 33/33 passed, svelte-check: 0 errors, vite build: clean)
 
 ## Log
 
@@ -59,3 +59,8 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
   - Dice: Enhanced `packages/core/src/dice.ts` to support chained multiple modifiers (e.g. `1d20+3+2`).
   - UI: Built `packages/ui/src/CustomSheet.svelte` (Apple-style vitals HP/AC/INIT, attribute steppers, and interactive action buttons); mounted inside `SideDrawer.svelte` under the `Sheet` tab.
   - Verification: `vitest` passes 9/9 suites (29/29 tests); `svelte-check` reports 0 errors/warnings; `vite build` succeeds; Playwright verified live character sheet rendering, interactive action click ("Longsword Strike" $\rightarrow$ `1d20+3+2`), and roll resolution in the live feed. Risk: none.
+- **L10 (Slice 6 Verification — T6):**
+  - Security Rules: Created `firebase/database.rules.json` enforcing the 3-hour session expiration guardrail (`expiresAt <= now + 10800000`), host-only authorization on `meta` and `fog`, anonymous presence writes, and payload validation banning Base64 strings in tokens (`!beginsWith('data:image')`). Added root `firebase.json` linking rules and hosting rewrites.
+  - Core & Adapters: Implemented `packages/core/src/campaign.ts` with `CampaignSnapshot` schema validation, and `packages/adapters/src/campaign-storage.ts` providing local campaign serialization/deserialization and persistence.
+  - Desktop: Added `save_campaign_file` and `load_campaign_file` commands in `apps/desktop/src-tauri/src/lib.rs`.
+  - Verification: `vitest` passes 11/11 suites (33/33 tests, +4 tests for campaign snapshot validation and storage persistence); `svelte-check` reports 0 errors/warnings; `vite build` succeeds cleanly. Risk: none. MVP v1 fully implemented and verified.

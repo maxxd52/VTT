@@ -5,3 +5,4 @@ export * from './board-engine';
 export * from './lerp';
 export * from './dice';
 export * from './sheet';
+export * from './campaign';
