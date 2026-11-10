@@ -5,8 +5,8 @@
         ".read": "auth != null",
         "meta": {
           ".read": "auth != null",
-          ".write": "auth != null && (!data.exists() || data.child('hostUid').val() === auth.uid)",
-          ".validate": "newData.hasChildren(['hostUid', 'expiresAt']) && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= (now + 10800000)"
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['hostUid', 'expiresAt']) && newData.child('hostUid').val() === auth.uid && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= (now + 10800000)"
         },
         "presence": {
           "$uid": {
@@ -24,7 +24,12 @@
         },
         "fog": {
           ".read": "auth != null",
-          ".write": "auth != null && root.child('active_sessions/' + $roomId + '/meta/hostUid').val() === auth.uid && root.child('active_sessions/' + $roomId + '/meta/expiresAt').val() > now"
+          ".write": "auth != null && root.child('active_sessions/' + $roomId + '/meta/hostUid').val() === auth.uid && root.child('active_sessions/' + $roomId + '/meta/expiresAt').val() > now",
+          "patches": {
+            "$patchId": {
+              ".validate": "newData.hasChildren(['mode', 'rects']) && (newData.child('mode').val() === 'hide' || newData.child('mode').val() === 'reveal')"
+            }
+          }
         },
         "rolls": {
           ".read": "auth != null",

@@ -37,6 +37,8 @@
         connected = true;
       } else if (event.type === 'session:left') {
         connected = false;
+      } else if (event.type === 'presence:changed') {
+        playerCount = Math.max(1, event.count);
       } else if (event.type === 'dice:rolled') {
         const entry: RollEntry = {
           id: `${event.timestamp}-${Math.random().toString(36).slice(2, 7)}`,
@@ -50,7 +52,9 @@
       }
     });
 
-    void transport.joinSession(roomCode, displayName, isHost);
+    transport.joinSession(roomCode, displayName, isHost).catch((err) => {
+      console.error('[VttShell] Failed to join session:', err);
+    });
     void assetProvider
       .resolveAssetUrl('/assets/maps/default-grid.webp')
       .then((res) => {

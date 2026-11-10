@@ -31,7 +31,8 @@ export type SessionEvent =
   | { type: 'session:left' }
   | { type: 'token:moved'; tokenId: string; x: number; y: number }
   | { type: 'dice:rolled'; actor: string; result: DiceRollResult; timestamp: number }
-  | { type: 'fog:patched'; patch: FogPatch };
+  | { type: 'fog:patched'; patch: FogPatch }
+  | { type: 'presence:changed'; count: number };
 
 export interface NetworkTransport {
   joinSession(roomId: string, displayName: string, isHost: boolean): Promise<void>;

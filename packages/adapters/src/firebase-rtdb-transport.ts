@@ -5,29 +5,36 @@ import {
   type SessionEvent,
   createThrottledEmitter
 } from '@vtt/core';
-import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
   getAuth,
-  onAuthStateChanged,
+  inMemoryPersistence,
+   setPersistence,
   signInAnonymously,
-  signOut,
   type Auth,
   type User
 } from 'firebase/auth';
 import {
   connectDatabaseEmulator,
   getDatabase,
-  off,
+  goOffline,
+  goOnline,
+  limitToLast,
+  onChildAdded,
   onDisconnect,
   onValue,
   push,
+  query,
   ref,
   set,
   update,
-  type Database,
-  type Unsubscribe
+  type Database
 } from 'firebase/database';
+
+/** Maximum number of past dice rolls replayed to a client when it joins. */
+const ROLL_HISTORY_LIMIT = 50;
+let transportInstanceId = 0;
 
 export interface FirebaseTransportConfig {
   apiKey: string;
@@ -59,6 +66,7 @@ export class FirebaseRTDBTransport implements NetworkTransport {
   private currentRoomId: string | null = null;
   private currentDisplayName = 'Player';
   private currentIsHost = false;
+  private sessionGeneration = 0;
 
   private eventHandlers = new Set<(event: SessionEvent) => void>();
   private activeListeners: Array<() => void> = [];
@@ -74,7 +82,8 @@ export class FirebaseRTDBTransport implements NetworkTransport {
       this.auth = options.auth ?? getAuth(this.app);
       this.db = options.database ?? getDatabase(this.app);
     } else if (options.config) {
-      this.app = getApps().length === 0 ? initializeApp(options.config) : getApp();
+      const appName = `vtt-client-${Date.now()}-${++transportInstanceId}`;
+      this.app = initializeApp(options.config, appName);
       this.auth = getAuth(this.app);
       this.db = getDatabase(this.app);
     } else if (options.useEmulator) {
@@ -84,7 +93,8 @@ export class FirebaseRTDBTransport implements NetworkTransport {
         databaseURL: `http://${host}:${dbPort}/?ns=demo-vtt-default-rtdb`,
         projectId: 'demo-vtt'
       };
-      this.app = getApps().length === 0 ? initializeApp(emulatorConfig) : getApp();
+      const appName = `vtt-emulator-${Date.now()}-${++transportInstanceId}`;
+      this.app = initializeApp(emulatorConfig, appName);
       this.auth = getAuth(this.app);
       this.db = getDatabase(this.app);
     }
@@ -103,9 +113,9 @@ export class FirebaseRTDBTransport implements NetworkTransport {
     }
 
     this.throttledMove = createThrottledEmitter((tokenId: string, x: number, y: number) => {
-      if (this.db && this.currentRoomId) {
+      if (this.db && this.currentRoomId && this.currentUser) {
         const tokenRef = ref(this.db, `active_sessions/${this.currentRoomId}/tokens/${tokenId}`);
-        void update(tokenRef, { x, y });
+        this.reportWriteFailure(`token move (${tokenId})`, update(tokenRef, { x, y }));
       } else {
         this.broadcastEvent({ type: 'token:moved', tokenId, x, y });
       }
@@ -113,130 +123,149 @@ export class FirebaseRTDBTransport implements NetworkTransport {
   }
 
   async joinSession(roomId: string, displayName: string, isHost: boolean): Promise<void> {
+    const generation = ++this.sessionGeneration;
     this.currentRoomId = roomId;
     this.currentDisplayName = displayName;
     this.currentIsHost = isHost;
 
     if (!this.auth || !this.db) {
       // In-memory fallback if Firebase credentials are not provided
-      this.broadcastEvent({
-        type: 'session:joined',
-        roomId,
-        displayName,
-        isHost
-      });
+      this.broadcastEvent({ type: 'session:joined', roomId, displayName, isHost });
       return;
     }
 
     // 1. Anonymous Authentication (Zero-friction join invariant)
+    // Use in-memory persistence so two tabs in the same browser get distinct
+    // anonymous UIDs and never overwrite or tear down each other's presence.
     try {
+      await setPersistence(this.auth, inMemoryPersistence);
       const userCred = await signInAnonymously(this.auth);
       this.currentUser = userCred.user;
     } catch (err) {
       console.warn('[FirebaseRTDBTransport] Auth/Connection failed, falling back to local session:', err);
-      this.broadcastEvent({
-        type: 'session:joined',
-        roomId,
-        displayName,
-        isHost
-      });
+      this.broadcastEvent({ type: 'session:joined', roomId, displayName, isHost });
       return;
     }
 
-    const sessionRoot = `active_sessions/${roomId}`;
-
-    // 2. Register Presence
-    const presenceRef = ref(this.db, `${sessionRoot}/presence/${this.currentUser.uid}`);
-    await onDisconnect(presenceRef).remove();
-    await set(presenceRef, {
-      displayName,
-      isHost,
-      joinedAt: Date.now()
-    });
-
-    // 3. Initialize Host Meta (if Host)
-    if (isHost) {
-      const metaRef = ref(this.db, `${sessionRoot}/meta`);
-      await update(metaRef, {
-        hostUid: this.currentUser.uid,
-        expiresAt: Date.now() + 3 * 3600 * 1000 // 3-hour session window
-      });
+    if (generation !== this.sessionGeneration) {
+      goOffline(this.db);
+      return;
     }
 
-    // 4. Listen to Live Tokens
-    const tokensRef = ref(this.db, `${sessionRoot}/tokens`);
-    const unsubscribeTokens = onValue(tokensRef, (snapshot) => {
+    const db = this.db;
+    goOnline(db);
+    const uid = this.currentUser.uid;
+    const sessionRoot = `active_sessions/${roomId}`;
+
+    // 2. Subscribe to live state FIRST, so a rejected write below can never
+    //    leave this client deaf to the rest of the table.
+    this.subscribeToSession(db, sessionRoot);
+
+    // 3. Register Presence
+    const presenceRef = ref(db, `${sessionRoot}/presence/${uid}`);
+    try {
+      await onDisconnect(presenceRef).remove();
+      if (generation !== this.sessionGeneration) {
+        goOffline(db);
+        return;
+      }
+      await set(presenceRef, { displayName, isHost, joinedAt: Date.now() });
+    } catch (err) {
+      console.error('[FirebaseRTDBTransport] Failed to register presence:', err);
+    }
+
+    if (generation !== this.sessionGeneration) {
+      try {
+        await set(presenceRef, null);
+      } catch {
+        // Ignored during teardown
+      }
+      goOffline(db);
+      return;
+    }
+
+    // 4. Claim / refresh Host Meta (if Host). Rejected when another live host owns the room.
+    if (isHost) {
+      try {
+        // Subtract a small buffer so minor client/server clock skew never trips
+        // the `expiresAt <= now + 3h` security rule validation.
+        await update(ref(db, `${sessionRoot}/meta`), {
+          hostUid: uid,
+          expiresAt: Date.now() + 3 * 3600 * 1000 - 5000 // 3-hour session window
+        });
+      } catch (err) {
+        console.error(
+          `[FirebaseRTDBTransport] Could not claim host of room "${roomId}". ` +
+            'Another active host owns it; GM-only writes (fog) will be rejected.',
+          err
+        );
+      }
+    }
+
+    this.broadcastEvent({ type: 'session:joined', roomId, displayName, isHost });
+  }
+
+  private subscribeToSession(db: Database, sessionRoot: string): void {
+    // Live Tokens
+    const unsubscribeTokens = onValue(ref(db, `${sessionRoot}/tokens`), (snapshot) => {
       const val = snapshot.val();
       if (!val) return;
       for (const [tokenId, data] of Object.entries(val)) {
         const token = data as { x: number; y: number };
         if (typeof token.x === 'number' && typeof token.y === 'number') {
-          this.broadcastEvent({
-            type: 'token:moved',
-            tokenId,
-            x: token.x,
-            y: token.y
-          });
+          this.broadcastEvent({ type: 'token:moved', tokenId, x: token.x, y: token.y });
         }
       }
     });
-    this.activeListeners.push(() => unsubscribeTokens());
+    this.activeListeners.push(unsubscribeTokens);
 
-    // 5. Listen to Live Dice Rolls
-    const rollsRef = ref(this.db, `${sessionRoot}/rolls`);
-    const unsubscribeRolls = onValue(rollsRef, (snapshot) => {
-      const val = snapshot.val();
-      if (!val) return;
-      const entries = Object.values(val) as Array<{
+    // Live Dice Rolls: each roll is delivered exactly once, history replayed on join.
+    const rollsQuery = query(ref(db, `${sessionRoot}/rolls`), limitToLast(ROLL_HISTORY_LIMIT));
+    const unsubscribeRolls = onChildAdded(rollsQuery, (snapshot) => {
+      const roll = snapshot.val() as {
         actor: string;
         expression: string;
         total: number;
-        rolls: number[];
+        rolls?: number[];
         modifier?: number;
         timestamp: number;
-      }>;
-      const latest = entries[entries.length - 1];
-      if (latest && latest.timestamp) {
-        this.broadcastEvent({
-          type: 'dice:rolled',
-          actor: latest.actor,
-          result: {
-            expression: latest.expression,
-            total: latest.total,
-            rolls: latest.rolls ?? [latest.total],
-            modifier: latest.modifier ?? 0
-          },
-          timestamp: latest.timestamp
-        });
-      }
+      } | null;
+      if (!roll || !roll.timestamp) return;
+      this.broadcastEvent({
+        type: 'dice:rolled',
+        actor: roll.actor,
+        result: {
+          expression: roll.expression,
+          total: roll.total,
+          rolls: roll.rolls ?? [roll.total],
+          modifier: roll.modifier ?? 0
+        },
+        timestamp: roll.timestamp
+      });
     });
-    this.activeListeners.push(() => unsubscribeRolls());
+    this.activeListeners.push(unsubscribeRolls);
 
-    // 6. Listen to Fog of War
-    const fogRef = ref(this.db, `${sessionRoot}/fog`);
-    const unsubscribeFog = onValue(fogRef, (snapshot) => {
+    // Fog of War: ordered patch log, so late joiners rebuild the full fog state.
+    const unsubscribeFog = onChildAdded(ref(db, `${sessionRoot}/fog/patches`), (snapshot) => {
       const val = snapshot.val();
       if (val && Array.isArray(val.rects)) {
         this.broadcastEvent({
           type: 'fog:patched',
-          patch: {
-            mode: val.mode ?? 'reveal',
-            rects: val.rects
-          }
+          patch: { mode: val.mode === 'hide' ? 'hide' : 'reveal', rects: val.rects }
         });
       }
     });
-    this.activeListeners.push(() => unsubscribeFog());
+    this.activeListeners.push(unsubscribeFog);
 
-    this.broadcastEvent({
-      type: 'session:joined',
-      roomId,
-      displayName,
-      isHost
+    // Presence: connected participant count
+    const unsubscribePresence = onValue(ref(db, `${sessionRoot}/presence`), (snapshot) => {
+      this.broadcastEvent({ type: 'presence:changed', count: snapshot.size });
     });
+    this.activeListeners.push(unsubscribePresence);
   }
 
   async leaveSession(): Promise<void> {
+    this.sessionGeneration++;
     for (const unsub of this.activeListeners) {
       unsub();
     }
@@ -249,6 +278,7 @@ export class FirebaseRTDBTransport implements NetworkTransport {
       } catch {
         // Ignored during teardown
       }
+      goOffline(this.db);
     }
 
     this.broadcastEvent({ type: 'session:left' });
@@ -260,7 +290,7 @@ export class FirebaseRTDBTransport implements NetworkTransport {
   }
 
   emitDiceRoll(expression: string, result: DiceRollResult): void {
-    if (!this.db || !this.currentRoomId) {
+    if (!this.db || !this.currentRoomId || !this.currentUser) {
       this.broadcastEvent({
         type: 'dice:rolled',
         actor: this.currentDisplayName,
@@ -271,27 +301,27 @@ export class FirebaseRTDBTransport implements NetworkTransport {
     }
 
     const rollsRef = ref(this.db, `active_sessions/${this.currentRoomId}/rolls`);
-    void push(rollsRef, {
-      actor: this.currentDisplayName,
-      expression: result.expression,
-      total: result.total,
-      rolls: result.rolls,
-      modifier: result.modifier,
-      timestamp: Date.now()
-    });
+    this.reportWriteFailure(
+      `dice roll (${expression})`,
+      push(rollsRef, {
+        actor: this.currentDisplayName,
+        expression: result.expression,
+        total: result.total,
+        rolls: result.rolls,
+        modifier: result.modifier,
+        timestamp: Date.now()
+      })
+    );
   }
 
   emitFogPatch(patch: FogPatch): void {
-    if (!this.db || !this.currentRoomId) {
+    if (!this.db || !this.currentRoomId || !this.currentUser) {
       this.broadcastEvent({ type: 'fog:patched', patch });
       return;
     }
 
-    const fogRef = ref(this.db, `active_sessions/${this.currentRoomId}/fog`);
-    void set(fogRef, {
-      mode: patch.mode,
-      rects: patch.rects
-    });
+    const patchesRef = ref(this.db, `active_sessions/${this.currentRoomId}/fog/patches`);
+    this.reportWriteFailure('fog patch', push(patchesRef, { mode: patch.mode, rects: patch.rects }));
   }
 
   onStateEvent(handler: (event: SessionEvent) => void): () => void {
@@ -299,6 +329,13 @@ export class FirebaseRTDBTransport implements NetworkTransport {
     return () => {
       this.eventHandlers.delete(handler);
     };
+  }
+
+  /** Surfaces rejected writes (e.g. permission_denied) instead of swallowing them. */
+  private reportWriteFailure(action: string, write: PromiseLike<unknown>): void {
+    Promise.resolve(write).catch((err: unknown) => {
+      console.error(`[FirebaseRTDBTransport] ${action} was rejected by the server:`, err);
+    });
   }
 
   private broadcastEvent(event: SessionEvent): void {

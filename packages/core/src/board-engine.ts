@@ -161,7 +161,12 @@ export class BoardEngine {
 
   public applyFogPatch(patch: FogPatch): void {
     if (patch.mode === 'hide') {
-      this.fogRects.push(...patch.rects);
+      // Idempotent: the author applies its patch locally and then receives the
+      // same patch back from the network, so identical rects are skipped.
+      for (const rect of patch.rects) {
+        const exists = this.fogRects.some((r) => r.every((value, i) => value === rect[i]));
+        if (!exists) this.fogRects.push(rect);
+      }
     } else if (patch.mode === 'reveal') {
       // Remove or slice out covered rects
       this.fogRects = this.fogRects.filter(([fx, fy, fw, fh]) => {

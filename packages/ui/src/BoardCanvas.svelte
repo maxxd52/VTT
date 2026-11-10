@@ -50,15 +50,26 @@
       }
     });
 
+    // Remote state may arrive before the async Pixi init finishes creating the
+    // tokens; keep the latest known position so it is applied once they exist.
+    const latestPositions = new Map<string, { x: number; y: number }>();
+    let engineReady = false;
+
     void engine.init().then(() => {
-      engine?.setTokens(initialTokens);
+      engine?.setTokens(
+        initialTokens.map((token) => ({ ...token, ...latestPositions.get(token.id) }))
+      );
       engine?.setTool(activeTool);
       engine?.setHost(isHost);
+      engineReady = true;
     });
 
     const unsubscribe = transport.onStateEvent((event) => {
       if (event.type === 'token:moved') {
-        engine?.updateTokenPosition(event.tokenId, event.x, event.y);
+        latestPositions.set(event.tokenId, { x: event.x, y: event.y });
+        if (engineReady) {
+          engine?.updateTokenPosition(event.tokenId, event.x, event.y);
+        }
       } else if (event.type === 'fog:patched') {
         engine?.applyFogPatch(event.patch);
       }
