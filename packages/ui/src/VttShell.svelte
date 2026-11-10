@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { AssetProvider, NetworkTransport, ToolMode } from '@vtt/core';
+  import { parseAndRollDice, type AssetProvider, type NetworkTransport, type ToolMode } from '@vtt/core';
   import SessionHeader from './SessionHeader.svelte';
   import SideDrawer, { type RollEntry } from './SideDrawer.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -66,15 +66,17 @@
     };
   });
 
+  function handleRollExpression(expression: string) {
+    try {
+      const result = parseAndRollDice(expression);
+      transport.emitDiceRoll(expression, result);
+    } catch (err) {
+      console.warn('Invalid dice roll expression:', err);
+    }
+  }
+
   function handleQuickRoll(sides: number) {
-    const rolled = Math.floor(Math.random() * sides) + 1;
-    const expression = `1d${sides}`;
-    transport.emitDiceRoll(expression, {
-      expression,
-      total: rolled,
-      rolls: [rolled],
-      modifier: 0
-    });
+    handleRollExpression(`1d${sides}`);
   }
 
   function handleToolSelect(tool: ToolMode) {
@@ -87,7 +89,7 @@
 
 <main class="vtt-canvas-backdrop relative h-screen w-screen overflow-hidden">
   <!-- Hardware-Accelerated Board Viewport (Pixi.js v8) -->
-  <BoardCanvas {activeTool} {transport} />
+  <BoardCanvas {activeTool} {transport} {isHost} />
 
   <!-- Floating HUD Overlay -->
   <div class="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
@@ -98,6 +100,7 @@
         {rolls}
         onToggle={() => (drawerOpen = !drawerOpen)}
         onQuickRoll={handleQuickRoll}
+        onCustomRoll={handleRollExpression}
       />
     </div>
 

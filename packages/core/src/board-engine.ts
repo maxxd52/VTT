@@ -5,15 +5,17 @@ import {
   Text,
   TextStyle
 } from 'pixi.js';
-import type { GridConfig, TokenState, ToolMode } from './contracts';
+import type { FogPatch, GridConfig, TokenState, ToolMode } from './contracts';
 import { calculateDistance, snapToGrid } from './grid';
 
 export interface BoardEngineOptions {
   canvas: HTMLCanvasElement;
   container: HTMLElement;
   grid?: GridConfig;
+  isHost?: boolean;
   onTokenMove?: (tokenId: string, x: number, y: number) => void;
   onTokenMoveEnd?: (tokenId: string, x: number, y: number) => void;
+  onFogPatch?: (patch: FogPatch) => void;
 }
 
 export class BoardEngine {
@@ -24,12 +26,15 @@ export class BoardEngine {
   private world = new Container();
   private mapLayer = new Graphics();
   private gridLayer = new Graphics();
+  private fogLayer = new Graphics();
   private tokenLayer = new Container();
   private rulerLayer = new Graphics();
+  private fogPreviewLayer = new Graphics();
   private rulerLabel: Text | null = null;
 
   private gridConfig: GridConfig = { size: 60, type: 'square' };
   private activeTool: ToolMode = 'select';
+  private isHost = true;
 
   private isPanning = false;
   private panStart = { x: 0, y: 0 };
@@ -40,11 +45,17 @@ export class BoardEngine {
   private isMeasuring = false;
   private rulerStart = { x: 0, y: 0 };
 
+  private isDrawingFog = false;
+  private fogStart = { x: 0, y: 0 };
+  private fogMode: 'reveal' | 'hide' = 'hide';
+  private fogRects: Array<[x: number, y: number, w: number, h: number]> = [];
+
   private tokens = new Map<string, Container>();
   private draggedToken: { id: string; container: Container; offset: { x: number; y: number } } | null = null;
 
   private onTokenMove?: (tokenId: string, x: number, y: number) => void;
   private onTokenMoveEnd?: (tokenId: string, x: number, y: number) => void;
+  private onFogPatch?: (patch: FogPatch) => void;
 
   private resizeObserver: ResizeObserver | null = null;
   private boundOnWheel: (e: WheelEvent) => void;
@@ -60,8 +71,12 @@ export class BoardEngine {
     if (options.grid) {
       this.gridConfig = options.grid;
     }
+    if (typeof options.isHost === 'boolean') {
+      this.isHost = options.isHost;
+    }
     this.onTokenMove = options.onTokenMove;
     this.onTokenMoveEnd = options.onTokenMoveEnd;
+    this.onFogPatch = options.onFogPatch;
 
     this.boundOnWheel = this.handleWheel.bind(this);
     this.boundOnPointerDown = this.handlePointerDown.bind(this);
@@ -91,8 +106,10 @@ export class BoardEngine {
 
     this.world.addChild(this.mapLayer);
     this.world.addChild(this.gridLayer);
+    this.world.addChild(this.fogLayer);
     this.world.addChild(this.tokenLayer);
     this.world.addChild(this.rulerLayer);
+    this.world.addChild(this.fogPreviewLayer);
 
     const labelStyle = new TextStyle({
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -130,6 +147,46 @@ export class BoardEngine {
     this.activeTool = tool;
     if (tool !== 'ruler') {
       this.clearRuler();
+    }
+    if (tool !== 'fog') {
+      this.isDrawingFog = false;
+      this.fogPreviewLayer.clear();
+    }
+  }
+
+  public setHost(isHost: boolean): void {
+    this.isHost = isHost;
+    this.renderFog();
+  }
+
+  public applyFogPatch(patch: FogPatch): void {
+    if (patch.mode === 'hide') {
+      this.fogRects.push(...patch.rects);
+    } else if (patch.mode === 'reveal') {
+      // Remove or slice out covered rects
+      this.fogRects = this.fogRects.filter(([fx, fy, fw, fh]) => {
+        return !patch.rects.some(([rx, ry, rw, rh]) => {
+          return fx >= rx && fy >= ry && fx + fw <= rx + rw && fy + fh <= ry + rh;
+        });
+      });
+    }
+    this.renderFog();
+  }
+
+  public clearFog(): void {
+    this.fogRects = [];
+    this.renderFog();
+  }
+
+  private renderFog(): void {
+    this.fogLayer.clear();
+    const alpha = this.isHost ? 0.55 : 0.98;
+
+    for (const [x, y, w, h] of this.fogRects) {
+      this.fogLayer.rect(x, y, w, h).fill({ color: 0x09090b, alpha });
+      if (this.isHost) {
+        this.fogLayer.rect(x, y, w, h).stroke({ color: 0x60a5fa, width: 1, alpha: 0.3 });
+      }
     }
   }
 
@@ -347,6 +404,14 @@ export class BoardEngine {
       this.isMeasuring = true;
       this.rulerStart = snapped;
       this.updateRuler(snapped, snapped);
+      return;
+    }
+
+    if (this.activeTool === 'fog' && event.button === 0 && this.isHost) {
+      const worldPos = this.screenToWorld(event.clientX, event.clientY);
+      this.isDrawingFog = true;
+      this.fogStart = worldPos;
+      this.fogMode = event.shiftKey ? 'reveal' : 'hide';
     }
   }
 
@@ -372,6 +437,20 @@ export class BoardEngine {
       const worldPos = this.screenToWorld(event.clientX, event.clientY);
       const snapped = snapToGrid(worldPos.x, worldPos.y, this.gridConfig);
       this.updateRuler(this.rulerStart, snapped);
+      return;
+    }
+
+    if (this.isDrawingFog && this.activeTool === 'fog') {
+      const worldPos = this.screenToWorld(event.clientX, event.clientY);
+      const minX = Math.min(this.fogStart.x, worldPos.x);
+      const minY = Math.min(this.fogStart.y, worldPos.y);
+      const w = Math.abs(worldPos.x - this.fogStart.x);
+      const h = Math.abs(worldPos.y - this.fogStart.y);
+
+      this.fogPreviewLayer.clear();
+      const color = this.fogMode === 'reveal' ? 0x22c55e : 0xef4444;
+      this.fogPreviewLayer.rect(minX, minY, w, h).stroke({ color, width: 2, alpha: 0.8 });
+      this.fogPreviewLayer.rect(minX, minY, w, h).fill({ color, alpha: 0.15 });
     }
   }
 
@@ -399,6 +478,26 @@ export class BoardEngine {
     if (this.isMeasuring && this.activeTool === 'ruler') {
       this.isMeasuring = false;
       // Keep ruler visible until clicked again or tool switched
+    }
+
+    if (this.isDrawingFog && this.activeTool === 'fog') {
+      this.isDrawingFog = false;
+      this.fogPreviewLayer.clear();
+
+      const worldPos = this.screenToWorld(event.clientX, event.clientY);
+      const minX = Math.min(this.fogStart.x, worldPos.x);
+      const minY = Math.min(this.fogStart.y, worldPos.y);
+      const w = Math.abs(worldPos.x - this.fogStart.x);
+      const h = Math.abs(worldPos.y - this.fogStart.y);
+
+      if (w > 5 && h > 5) {
+        const patch: FogPatch = {
+          mode: this.fogMode,
+          rects: [[minX, minY, w, h]]
+        };
+        this.applyFogPatch(patch);
+        this.onFogPatch?.(patch);
+      }
     }
   }
 

@@ -11,6 +11,7 @@
   interface Props {
     activeTool: ToolMode;
     transport: NetworkTransport;
+    isHost?: boolean;
     gridConfig?: GridConfig;
     initialTokens?: TokenState[];
   }
@@ -18,6 +19,7 @@
   let {
     activeTool,
     transport,
+    isHost = true,
     gridConfig = { size: 60, type: 'square' },
     initialTokens = [
       { id: 'token-1', name: 'Valeros', x: -60, y: -60, imageUrl: '', hp: [28, 30] },
@@ -36,22 +38,29 @@
       canvas: canvasRef,
       container: containerRef,
       grid: gridConfig,
+      isHost,
       onTokenMove: (id, x, y) => {
         transport.emitTokenMove(id, x, y);
       },
       onTokenMoveEnd: (id, x, y) => {
         transport.emitTokenMove(id, x, y);
+      },
+      onFogPatch: (patch) => {
+        transport.emitFogPatch(patch);
       }
     });
 
     void engine.init().then(() => {
       engine?.setTokens(initialTokens);
       engine?.setTool(activeTool);
+      engine?.setHost(isHost);
     });
 
     const unsubscribe = transport.onStateEvent((event) => {
       if (event.type === 'token:moved') {
         engine?.updateTokenPosition(event.tokenId, event.x, event.y);
+      } else if (event.type === 'fog:patched') {
+        engine?.applyFogPatch(event.patch);
       }
     });
 
@@ -71,6 +80,12 @@
   $effect(() => {
     if (engine) {
       engine.setGridConfig(gridConfig);
+    }
+  });
+
+  $effect(() => {
+    if (engine) {
+      engine.setHost(isHost);
     }
   });
 </script>

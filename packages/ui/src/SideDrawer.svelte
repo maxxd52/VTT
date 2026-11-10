@@ -15,11 +15,20 @@
     rolls: RollEntry[];
     onToggle: () => void;
     onQuickRoll: (sides: number) => void;
+    onCustomRoll?: (expression: string) => void;
   }
 
-  let { open, rolls, onToggle, onQuickRoll }: Props = $props();
+  let { open, rolls, onToggle, onQuickRoll, onCustomRoll }: Props = $props();
   let activeTab = $state<'feed' | 'sheet'>('feed');
+  let customExpr = $state('');
   const diceSides = [4, 6, 8, 10, 12, 20];
+
+  function submitCustomRoll(e: SubmitEvent) {
+    e.preventDefault();
+    if (!customExpr.trim()) return;
+    onCustomRoll?.(customExpr.trim());
+    customExpr = '';
+  }
 </script>
 
 <div class="pointer-events-auto flex flex-col items-end gap-2">
@@ -80,6 +89,22 @@
               </button>
             {/each}
           </div>
+
+          <form onsubmit={submitCustomRoll} class="flex items-center gap-1.5 border-b border-white/8 px-2.5 py-2">
+            <input
+              type="text"
+              bind:value={customExpr}
+              placeholder="e.g. 2d6+3, 4d6kh3"
+              aria-label="Custom dice expression"
+              class="flex-1 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-white placeholder-zinc-500 outline-none transition focus:border-sky-400"
+            />
+            <button
+              type="submit"
+              class="cursor-pointer rounded-lg border border-white/10 bg-white/10 px-2.5 py-1 text-xs font-semibold text-zinc-200 transition hover:bg-white/20 active:scale-95"
+            >
+              Roll
+            </button>
+          </form>
 
           <div class="flex-1 space-y-2 overflow-y-auto p-3">
             {#if rolls.length === 0}
