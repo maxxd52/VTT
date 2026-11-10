@@ -14,7 +14,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 
 ## Tasks
 
-- [ ] **T1** (S1) — Route: `inline` — Scaffold monorepo, core adapter interfaces, throttle utility, `SparkAssetProvider`, Apple-style Svelte 5 + Tailwind UI shell, `apps/web` Vite app, and `apps/desktop` Tauri v2 template. | Status: in-progress | Commit: pending
+- [x] **T1** (S1) — Route: `inline` — Scaffold monorepo, core adapter interfaces, throttle utility, `SparkAssetProvider`, Apple-style Svelte 5 + Tailwind UI shell, `apps/web` Vite app, and `apps/desktop` Tauri v2 template. | Status: done | Commit: `58f8dd1` (vitest: 6/6 passed, svelte-check: 0 errors, vite build: 24.63 kB gzip JS, Playwright: 0 console errors; Tauri native build pending Rust install)
 - [ ] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: pending
 - [ ] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: pending
 - [ ] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: pending
@@ -32,3 +32,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
   - Voice/Video excluded ("dejemoslo fuera").
   - Project named "VTT" and authorized Slice 1 start.
 - **L3 (Environment Discovery & Engram Note):** Toolchain check showed Node `v22.23.4`, npm `10.9.9`, Git `2.56.0`, and **no Rust/Cargo installed yet** (`apps/desktop` native compilation requires installing Rust via `rustup` + WebView2). Engram mirror is marked pending until user sets `C:\Users\malon\.gemini\antigravity\scratch\VTT` as active workspace.
+- **L4 (Slice 1 Verification — T1):**
+  - RED: `vitest run` failed 3/3 test suites before implementation.
+  - GREEN: `vitest run` passed 3/3 suites (6/6 tests); `svelte-check` 0 errors/warnings; `vite build` produced 24.63 kB gzipped JS; Playwright rendered UI with 0 console errors and verified live `d20` roll.
+  - Pending external check: Native Rust compilation of `apps/desktop` awaits Rust toolchain (`rustup`). Risk: none.
