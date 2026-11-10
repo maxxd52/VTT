@@ -18,7 +18,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 - [x] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: done | Commit: `d39206b` (vitest: 11/11 passed, svelte-check: 0 errors, vite build: 358.25 kB JS, Playwright E2E verified live canvas + tokens + ruler)
 - [x] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: done | Commit: `da8189f` (vitest: 20/20 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [x] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: done | Commit: `58d292f` (vitest: 25/25 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
-- [x] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: done | Commit: pending (vitest: 29/29 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
+- [x] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: done | Commit: `deeed04` (vitest: 29/29 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [ ] **T6** (S6) — Route: `inline` — Implement Tauri local storage commands and RTDB `database.rules.json` session expiration. | Status: pending
 
 ## Log
