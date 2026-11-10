@@ -16,7 +16,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 
 - [x] **T1** (S1) — Route: `inline` — Scaffold monorepo, core adapter interfaces, throttle utility, `SparkAssetProvider`, Apple-style Svelte 5 + Tailwind UI shell, `apps/web` Vite app, and `apps/desktop` Tauri v2 template. | Status: done | Commit: `58f8dd1` (vitest: 6/6 passed, svelte-check: 0 errors, vite build: 24.63 kB gzip JS, Playwright: 0 console errors; Tauri native build pending Rust install)
 - [x] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: done | Commit: `d39206b` (vitest: 11/11 passed, svelte-check: 0 errors, vite build: 358.25 kB JS, Playwright E2E verified live canvas + tokens + ruler)
-- [ ] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: pending
+- [x] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: done | Commit: pending (vitest: 20/20 passed, svelte-check: 0 errors, vite build: clean, Playwright E2E verified)
 - [ ] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: pending
 - [ ] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: pending
 - [ ] **T6** (S6) — Route: `inline` — Implement Tauri local storage commands and RTDB `database.rules.json` session expiration. | Status: pending
@@ -43,3 +43,9 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
   - Types: `svelte-check` reported 0 errors, 0 warnings across the workspace.
   - Production Build: `vite build` cleanly bundled Pixi.js v8 + Svelte 5 + Tailwind in 3.49s.
   - E2E Validation: Navigated with Playwright to `http://localhost:5173/`, verified hardware-accelerated WebGL canvas mount, rendered tokens with HP indicators, switched tools to Measure/Ruler, executed interactive drag measurement (60 ft, glowing reticle + distance badge), captured screenshots `vtt-board-live` and `vtt-ruler-live`. Risk: none.
+- **L7 (Slice 3 Verification — T3):**
+  - Dependencies: Installed `firebase` and `dexie` in `@vtt/adapters`.
+  - Core: Implemented `packages/core/src/lerp.ts` (`lerp`, `lerpPoint`, `expDecay`, `expDecayPoint`) with 4 deterministic unit tests in `packages/core/tests/lerp.test.ts`.
+  - Adapters: Implemented `FirebaseRTDBTransport` (`packages/adapters/src/firebase-rtdb-transport.ts`) with anonymous authentication, presence tracking, 10 Hz throttled token sync, and modular event listeners; implemented `CachedAssetProvider` and `DexieAssetCache` (`packages/adapters/src/cached-asset-provider.ts`, `dexie-asset-cache.ts`) enforcing Invariant #5 (local cache by content hash before network).
+  - Web: Updated `apps/web/src/App.svelte` to parse URL room code / host parameters and use `CachedAssetProvider`.
+  - Verification: `vitest` passes 7/7 suites (20/20 tests, +9 tests for lerp, cached provider, and Firebase transport); `svelte-check` reports 0 errors/warnings; `vite build` succeeds; Playwright verified room routing and UI mount. Risk: none.
