@@ -15,7 +15,7 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
 ## Tasks
 
 - [x] **T1** (S1) — Route: `inline` — Scaffold monorepo, core adapter interfaces, throttle utility, `SparkAssetProvider`, Apple-style Svelte 5 + Tailwind UI shell, `apps/web` Vite app, and `apps/desktop` Tauri v2 template. | Status: done | Commit: `58f8dd1` (vitest: 6/6 passed, svelte-check: 0 errors, vite build: 24.63 kB gzip JS, Playwright: 0 console errors; Tauri native build pending Rust install)
-- [ ] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: pending
+- [x] **T2** (S2) — Route: `inline` — Implement Pixi.js v8 viewport, grid, tokens, and ruler. | Status: done | Commit: pending (vitest: 11/11 passed, svelte-check: 0 errors, vite build: 358.25 kB JS, Playwright E2E verified live canvas + tokens + ruler)
 - [ ] **T3** (S3) — Route: `inline` — Implement Firebase RTDB transport, Anonymous Auth, 10 Hz sync + lerp, and Dexie cache. | Status: pending
 - [ ] **T4** (S4) — Route: `inline` — Implement manual Fog of War, dice roller, and chat log. | Status: pending
 - [ ] **T5** (S5) — Route: `inline` — Implement declarative JSON sheet renderer and safe formula parser. | Status: pending
@@ -36,3 +36,10 @@ Branch: feat/mvp-v1 | Delivery Strategy: ask-on-risk | Test Runner: vitest
   - RED: `vitest run` failed 3/3 test suites before implementation.
   - GREEN: `vitest run` passed 3/3 suites (6/6 tests); `svelte-check` 0 errors/warnings; `vite build` produced 24.63 kB gzipped JS; Playwright rendered UI with 0 console errors and verified live `d20` roll.
   - Pending external check: Native Rust compilation of `apps/desktop` awaits Rust toolchain (`rustup`). Risk: none.
+- **L5 (Slice 2 Authorization — T2):** User authorized setting up Engram and proceeding with T2: "primero dejemos todo listo para emgram dado que es indispensable para la claridad del proyecto y luego has el siguiente paso que me sugeriste". Configured `.engram/config.json` with `project_name: "vtt"` and registered active session `c01f2d70-dbdc-40ab-a697-74822fb8a302`. Engram mirror active. Proceeding with T2.
+- **L6 (Slice 2 Verification — T2):**
+  - RED: `vitest run` failed before `packages/core/src/grid.ts` implementation (missing module).
+  - GREEN: `vitest run` passed 4/4 suites (11/11 tests, +5 tests for square/hex grid coordinate conversion, snapping, and Chebyshev/hex distance).
+  - Types: `svelte-check` reported 0 errors, 0 warnings across the workspace.
+  - Production Build: `vite build` cleanly bundled Pixi.js v8 + Svelte 5 + Tailwind in 3.49s.
+  - E2E Validation: Navigated with Playwright to `http://localhost:5173/`, verified hardware-accelerated WebGL canvas mount, rendered tokens with HP indicators, switched tools to Measure/Ruler, executed interactive drag measurement (60 ft, glowing reticle + distance badge), captured screenshots `vtt-board-live` and `vtt-ruler-live`. Risk: none.

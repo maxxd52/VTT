@@ -4,6 +4,7 @@
   import SessionHeader from './SessionHeader.svelte';
   import SideDrawer, { type RollEntry } from './SideDrawer.svelte';
   import Toolbar from './Toolbar.svelte';
+  import BoardCanvas from './BoardCanvas.svelte';
 
   interface Props {
     transport: NetworkTransport;
@@ -85,19 +86,8 @@
 </script>
 
 <main class="vtt-canvas-backdrop relative h-screen w-screen overflow-hidden">
-  <!-- Viewport Canvas Placeholder (Pixi.js v8 mounts here in Slice 2) -->
-  <div class="absolute inset-0 flex items-center justify-center">
-    <div class="pointer-events-none flex flex-col items-center text-center opacity-70">
-      <div
-        class="rounded-full border border-white/10 bg-white/4 px-3 py-1 text-[11px] font-medium tracking-wide text-zinc-400"
-      >
-        Active Tool: <span class="text-zinc-200 uppercase">{activeTool}</span>
-      </div>
-      <p class="mt-2 text-xs text-zinc-500">
-        Pixi.js v8 2D Board Surface &bull; Asset Ready: {resolvedMapUrl ? 'Yes' : 'Initializing'}
-      </p>
-    </div>
-  </div>
+  <!-- Hardware-Accelerated Board Viewport (Pixi.js v8) -->
+  <BoardCanvas {activeTool} {transport} />
 
   <!-- Floating HUD Overlay -->
   <div class="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
