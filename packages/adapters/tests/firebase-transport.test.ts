@@ -54,4 +54,15 @@ describe('FirebaseRTDBTransport', () => {
     transport.emitTokenMove('t1', 10, 20);
     expect(count).toBe(1); // handler removed
   });
+
+  it('initializes with useEmulator options without throwing', () => {
+    expect(() => {
+      new FirebaseRTDBTransport({
+        useEmulator: true,
+        emulatorHost: '127.0.0.1',
+        databasePort: 9000,
+        authPort: 9099
+      });
+    }).not.toThrow();
+  });
 });

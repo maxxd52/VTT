@@ -6,8 +6,17 @@ import {
   createThrottledEmitter
 } from '@vtt/core';
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut, type Auth, type User } from 'firebase/auth';
 import {
+  connectAuthEmulator,
+  getAuth,
+  onAuthStateChanged,
+  signInAnonymously,
+  signOut,
+  type Auth,
+  type User
+} from 'firebase/auth';
+import {
+  connectDatabaseEmulator,
   getDatabase,
   off,
   onDisconnect,
@@ -35,6 +44,10 @@ export interface FirebaseTransportOptions {
   app?: FirebaseApp;
   auth?: Auth;
   database?: Database;
+  useEmulator?: boolean;
+  emulatorHost?: string;
+  authPort?: number;
+  databasePort?: number;
 }
 
 export class FirebaseRTDBTransport implements NetworkTransport {
@@ -52,6 +65,10 @@ export class FirebaseRTDBTransport implements NetworkTransport {
   private readonly throttledMove: (tokenId: string, x: number, y: number) => void;
 
   constructor(options: FirebaseTransportOptions = {}) {
+    const host = options.emulatorHost || '127.0.0.1';
+    const authPort = options.authPort || 9099;
+    const dbPort = options.databasePort || 9000;
+
     if (options.app) {
       this.app = options.app;
       this.auth = options.auth ?? getAuth(this.app);
@@ -60,6 +77,29 @@ export class FirebaseRTDBTransport implements NetworkTransport {
       this.app = getApps().length === 0 ? initializeApp(options.config) : getApp();
       this.auth = getAuth(this.app);
       this.db = getDatabase(this.app);
+    } else if (options.useEmulator) {
+      const emulatorConfig: FirebaseTransportConfig = {
+        apiKey: 'demo-vtt-key',
+        authDomain: 'localhost',
+        databaseURL: `http://${host}:${dbPort}/?ns=demo-vtt-default-rtdb`,
+        projectId: 'demo-vtt'
+      };
+      this.app = getApps().length === 0 ? initializeApp(emulatorConfig) : getApp();
+      this.auth = getAuth(this.app);
+      this.db = getDatabase(this.app);
+    }
+
+    if (options.useEmulator && this.auth && this.db) {
+      try {
+        connectAuthEmulator(this.auth, `http://${host}:${authPort}`, { disableWarnings: true });
+      } catch {
+        // Ignore if already connected
+      }
+      try {
+        connectDatabaseEmulator(this.db, host, dbPort);
+      } catch {
+        // Ignore if already connected
+      }
     }
 
     this.throttledMove = createThrottledEmitter((tokenId: string, x: number, y: number) => {
@@ -89,8 +129,19 @@ export class FirebaseRTDBTransport implements NetworkTransport {
     }
 
     // 1. Anonymous Authentication (Zero-friction join invariant)
-    const userCred = await signInAnonymously(this.auth);
-    this.currentUser = userCred.user;
+    try {
+      const userCred = await signInAnonymously(this.auth);
+      this.currentUser = userCred.user;
+    } catch (err) {
+      console.warn('[FirebaseRTDBTransport] Auth/Connection failed, falling back to local session:', err);
+      this.broadcastEvent({
+        type: 'session:joined',
+        roomId,
+        displayName,
+        isHost
+      });
+      return;
+    }
 
     const sessionRoot = `active_sessions/${roomId}`;
 
