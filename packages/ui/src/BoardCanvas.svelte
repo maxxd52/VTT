@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import {
     BoardEngine,
+    type FogPatch,
     type GridConfig,
     type NetworkTransport,
     type TokenState,
@@ -51,14 +52,20 @@
     });
 
     // Remote state may arrive before the async Pixi init finishes creating the
-    // tokens; keep the latest known position so it is applied once they exist.
+    // tokens and layers; keep latest positions and pending fog patches so they
+    // are applied once the engine is ready.
     const latestPositions = new Map<string, { x: number; y: number }>();
+    const pendingFogPatches: FogPatch[] = [];
     let engineReady = false;
 
     void engine.init().then(() => {
       engine?.setTokens(
         initialTokens.map((token) => ({ ...token, ...latestPositions.get(token.id) }))
       );
+      for (const patch of pendingFogPatches) {
+        engine?.applyFogPatch(patch);
+      }
+      pendingFogPatches.length = 0;
       engine?.setTool(activeTool);
       engine?.setHost(isHost);
       engineReady = true;
@@ -71,7 +78,11 @@
           engine?.updateTokenPosition(event.tokenId, event.x, event.y);
         }
       } else if (event.type === 'fog:patched') {
-        engine?.applyFogPatch(event.patch);
+        if (engineReady) {
+          engine?.applyFogPatch(event.patch);
+        } else {
+          pendingFogPatches.push(event.patch);
+        }
       }
     });
 

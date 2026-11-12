@@ -4,7 +4,7 @@
 
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const roomCode = params?.get('room') || 'VTT-101';
-  const isHost = params?.has('room') ? params?.get('host') === '1' : true;
+  const isHost = params?.get('host') === '0' ? false : (params?.has('room') ? params?.get('host') === '1' : true);
   const displayName = params?.get('name') || (isHost ? 'Game Master' : 'Player');
   const forceMemory = params?.get('memory') === '1';
 

@@ -58,12 +58,16 @@ export class BoardEngine {
   private onFogPatch?: (patch: FogPatch) => void;
 
   private resizeObserver: ResizeObserver | null = null;
+  private cachedRect: { left: number; top: number; width: number; height: number } | null = null;
+  private renderScheduled = false;
+  private rafId: number | null = null;
   private boundOnWheel: (e: WheelEvent) => void;
   private boundOnPointerDown: (e: PointerEvent) => void;
   private boundOnPointerMove: (e: PointerEvent) => void;
   private boundOnPointerUp: (e: PointerEvent) => void;
   private boundOnKeyDown: (e: KeyboardEvent) => void;
   private boundOnKeyUp: (e: KeyboardEvent) => void;
+  private boundOnVisibilityChange: () => void;
 
   constructor(options: BoardEngineOptions) {
     this.canvas = options.canvas;
@@ -88,19 +92,29 @@ export class BoardEngine {
     this.boundOnKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') this.isSpacePressed = false;
     };
+    this.boundOnVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        this.requestRender();
+      }
+    };
   }
 
   public async init(): Promise<void> {
     const app = new Application();
+    const rawDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     await app.init({
       canvas: this.canvas,
       resizeTo: this.container,
-      backgroundAlpha: 0,
-      antialias: true,
+      backgroundColor: 0x0b0c0f,
+      backgroundAlpha: 1,
+      antialias: false,
       autoDensity: true,
-      resolution: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      autoStart: false,
+      powerPreference: 'low-power',
+      resolution: Math.min(rawDpr, 1.5)
     });
 
+    app.ticker.stop();
     this.app = app;
     this.app.stage.addChild(this.world);
 
@@ -125,9 +139,14 @@ export class BoardEngine {
     const width = this.container.clientWidth || 800;
     const height = this.container.clientHeight || 600;
     this.world.position.set(width / 2, height / 2);
+    this.updateCachedRect();
 
     this.renderDefaultMap();
     this.renderGrid();
+    if (this.fogRects.length > 0) {
+      this.renderFog();
+    }
+    this.requestRender();
 
     // Event listeners
     this.canvas.addEventListener('wheel', this.boundOnWheel, { passive: false });
@@ -136,6 +155,9 @@ export class BoardEngine {
     window.addEventListener('pointerup', this.boundOnPointerUp);
     window.addEventListener('keydown', this.boundOnKeyDown);
     window.addEventListener('keyup', this.boundOnKeyUp);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.boundOnVisibilityChange);
+    }
 
     this.resizeObserver = new ResizeObserver(() => {
       this.handleResize();
@@ -145,18 +167,26 @@ export class BoardEngine {
 
   public setTool(tool: ToolMode): void {
     this.activeTool = tool;
+    let dirty = false;
     if (tool !== 'ruler') {
       this.clearRuler();
+      dirty = true;
     }
     if (tool !== 'fog') {
       this.isDrawingFog = false;
       this.fogPreviewLayer.clear();
+      dirty = true;
+    }
+    if (dirty) {
+      this.requestRender();
     }
   }
 
   public setHost(isHost: boolean): void {
+    if (this.isHost === isHost && this.fogRects.length === 0) return;
     this.isHost = isHost;
     this.renderFog();
+    this.requestRender();
   }
 
   public applyFogPatch(patch: FogPatch): void {
@@ -176,11 +206,13 @@ export class BoardEngine {
       });
     }
     this.renderFog();
+    this.requestRender();
   }
 
   public clearFog(): void {
     this.fogRects = [];
     this.renderFog();
+    this.requestRender();
   }
 
   private renderFog(): void {
@@ -196,8 +228,10 @@ export class BoardEngine {
   }
 
   public setGridConfig(config: GridConfig): void {
+    if (this.gridConfig.size === config.size && this.gridConfig.type === config.type) return;
     this.gridConfig = config;
     this.renderGrid();
+    this.requestRender();
   }
 
   public setTokens(tokenStates: TokenState[]): void {
@@ -216,13 +250,16 @@ export class BoardEngine {
     for (const token of tokenStates) {
       this.upsertToken(token);
     }
+    this.requestRender();
   }
 
   public updateTokenPosition(id: string, x: number, y: number): void {
     const container = this.tokens.get(id);
     if (!container) return;
     if (this.draggedToken?.id === id) return; // Do not overwrite active drag preview
+    if (container.position.x === x && container.position.y === y) return;
     container.position.set(x, y);
+    this.requestRender();
   }
 
   private upsertToken(token: TokenState): void {
@@ -321,6 +358,7 @@ export class BoardEngine {
   }
 
   private renderDefaultMap(): void {
+    this.mapLayer.cacheAsTexture?.(false);
     this.mapLayer.clear();
 
     const arenaRadius = 1600;
@@ -332,9 +370,11 @@ export class BoardEngine {
     for (let r = 200; r < arenaRadius; r += 200) {
       this.mapLayer.circle(0, 0, r).stroke({ color: 0xffffff, width: 1, alpha: 0.04 });
     }
+    this.mapLayer.cacheAsTexture?.(true);
   }
 
   private renderGrid(): void {
+    this.gridLayer.cacheAsTexture?.(false);
     this.gridLayer.clear();
     const size = this.gridConfig.size;
     const extent = 1600;
@@ -358,6 +398,7 @@ export class BoardEngine {
         this.gridLayer.moveTo(-extent, y).lineTo(extent, y).stroke({ color: 0xffffff, width: 1, alpha: 0.08 });
       }
     }
+    this.gridLayer.cacheAsTexture?.(true);
   }
 
   private drawHex(cx: number, cy: number, radius: number): void {
@@ -379,8 +420,9 @@ export class BoardEngine {
     const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
     const oldScale = this.world.scale.x;
     const newScale = Math.min(Math.max(oldScale * zoomFactor, 0.2), 3.5);
+    if (newScale === oldScale) return;
 
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.cachedRect ?? this.updateCachedRect();
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
 
@@ -392,6 +434,7 @@ export class BoardEngine {
 
     this.world.scale.set(newScale);
     this.world.position.set(mouseX - worldPos.x * newScale, mouseY - worldPos.y * newScale);
+    this.requestRender();
   }
 
   private handlePointerDown(event: PointerEvent): void {
@@ -409,6 +452,7 @@ export class BoardEngine {
       this.isMeasuring = true;
       this.rulerStart = snapped;
       this.updateRuler(snapped, snapped);
+      this.requestRender();
       return;
     }
 
@@ -425,6 +469,7 @@ export class BoardEngine {
       const dx = event.clientX - this.panStart.x;
       const dy = event.clientY - this.panStart.y;
       this.world.position.set(this.worldStart.x + dx, this.worldStart.y + dy);
+      this.requestRender();
       return;
     }
 
@@ -434,6 +479,7 @@ export class BoardEngine {
       const rawY = worldPos.y - this.draggedToken.offset.y;
 
       this.draggedToken.container.position.set(rawX, rawY);
+      this.requestRender();
       this.onTokenMove?.(this.draggedToken.id, rawX, rawY);
       return;
     }
@@ -442,6 +488,7 @@ export class BoardEngine {
       const worldPos = this.screenToWorld(event.clientX, event.clientY);
       const snapped = snapToGrid(worldPos.x, worldPos.y, this.gridConfig);
       this.updateRuler(this.rulerStart, snapped);
+      this.requestRender();
       return;
     }
 
@@ -456,6 +503,7 @@ export class BoardEngine {
       const color = this.fogMode === 'reveal' ? 0x22c55e : 0xef4444;
       this.fogPreviewLayer.rect(minX, minY, w, h).stroke({ color, width: 2, alpha: 0.8 });
       this.fogPreviewLayer.rect(minX, minY, w, h).fill({ color, alpha: 0.15 });
+      this.requestRender();
     }
   }
 
@@ -476,6 +524,7 @@ export class BoardEngine {
 
       const tokenId = this.draggedToken.id;
       this.draggedToken = null;
+      this.requestRender();
 
       this.onTokenMoveEnd?.(tokenId, snapped.x, snapped.y);
     }
@@ -502,6 +551,8 @@ export class BoardEngine {
         };
         this.applyFogPatch(patch);
         this.onFogPatch?.(patch);
+      } else {
+        this.requestRender();
       }
     }
   }
@@ -538,8 +589,19 @@ export class BoardEngine {
     }
   }
 
-  private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+  private updateCachedRect(): { left: number; top: number; width: number; height: number } {
     const rect = this.canvas.getBoundingClientRect();
+    this.cachedRect = {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+    return this.cachedRect;
+  }
+
+  private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.cachedRect ?? this.updateCachedRect();
     const mouseX = clientX - rect.left;
     const mouseY = clientY - rect.top;
 
@@ -549,18 +611,51 @@ export class BoardEngine {
     };
   }
 
+  public requestRender(): void {
+    if (this.renderScheduled || !this.app) return;
+    this.renderScheduled = true;
+
+    const schedule =
+      typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame.bind(window)
+        : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+
+    this.rafId = schedule(() => {
+      this.renderScheduled = false;
+      this.rafId = null;
+      if (this.app && this.app.renderer) {
+        this.app.renderer.render(this.app.stage);
+      }
+    });
+  }
+
   private handleResize(): void {
+    this.updateCachedRect();
     if (!this.app || !this.app.renderer) return;
     this.app.renderer.resize(this.container.clientWidth, this.container.clientHeight);
+    this.requestRender();
   }
 
   public destroy(): void {
+    if (
+      this.rafId !== null &&
+      typeof window !== 'undefined' &&
+      typeof window.cancelAnimationFrame === 'function'
+    ) {
+      window.cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.renderScheduled = false;
+
     this.canvas.removeEventListener('wheel', this.boundOnWheel);
     this.canvas.removeEventListener('pointerdown', this.boundOnPointerDown);
     window.removeEventListener('pointermove', this.boundOnPointerMove);
     window.removeEventListener('pointerup', this.boundOnPointerUp);
     window.removeEventListener('keydown', this.boundOnKeyDown);
     window.removeEventListener('keyup', this.boundOnKeyUp);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
+    }
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();

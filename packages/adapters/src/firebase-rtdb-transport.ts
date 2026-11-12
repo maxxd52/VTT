@@ -70,6 +70,7 @@ export class FirebaseRTDBTransport implements NetworkTransport {
 
   private eventHandlers = new Set<(event: SessionEvent) => void>();
   private activeListeners: Array<() => void> = [];
+  private lastKnownTokens = new Map<string, { x: number; y: number }>();
   private readonly throttledMove: (tokenId: string, x: number, y: number) => void;
 
   constructor(options: FirebaseTransportOptions = {}) {
@@ -207,12 +208,18 @@ export class FirebaseRTDBTransport implements NetworkTransport {
 
   private subscribeToSession(db: Database, sessionRoot: string): void {
     // Live Tokens
+    this.lastKnownTokens.clear();
     const unsubscribeTokens = onValue(ref(db, `${sessionRoot}/tokens`), (snapshot) => {
       const val = snapshot.val();
       if (!val) return;
       for (const [tokenId, data] of Object.entries(val)) {
         const token = data as { x: number; y: number };
         if (typeof token.x === 'number' && typeof token.y === 'number') {
+          const prev = this.lastKnownTokens.get(tokenId);
+          if (prev && prev.x === token.x && prev.y === token.y) {
+            continue;
+          }
+          this.lastKnownTokens.set(tokenId, { x: token.x, y: token.y });
           this.broadcastEvent({ type: 'token:moved', tokenId, x: token.x, y: token.y });
         }
       }
